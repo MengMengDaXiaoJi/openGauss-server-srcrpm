@@ -1,22 +1,30 @@
 # opengauss-srcrpm
 
 #### Description
-用于打包适配好的riscv64平台的openGauss-server
+This project is used to build and package openGauss-server master code on riscv64 platform, also compatible with x86_64 and aarch64 architectures.
 
 #### Software Architecture
-Software architecture description
+Mainly for riscv64, also compatible with x86_64 and aarch64 architectures.
 
-#### Installation
+#### Prepare
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+1.  prepare a openeuler system on riscv64 platform or a container with openeuler system.
 
-#### Instructions
+    You can use our [mirror rootfs openeuler22.03](https://mirror.iscas.ac.cn/openeuler-sig-riscv/openEuler-RISC-V/preview/openEuler-22.03-V2-riscv64/openeuler-rootfs.tar.gz)
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+2.  execute the updatecode.sh to clone and package latest openGauss-server master code.
+
+    ```shell
+    sh ./updatecode.sh
+    ```
+
+#### Install
+
+1.  install the output rpm with follow script
+
+    ```shell 
+    dnf install -y opengauss-master-1.riscv64.rpm
+    ```
 
 #### Contribution
 
@@ -25,12 +33,3 @@ Software architecture description
 3.  Commit your code
 4.  Create Pull Request
 
-
-#### Gitee Feature
-
-1.  You can use Readme\_XXX.md to support different languages, such as Readme\_en.md, Readme\_zh.md
-2.  Gitee blog [blog.gitee.com](https://blog.gitee.com)
-3.  Explore open source project [https://gitee.com/explore](https://gitee.com/explore)
-4.  The most valuable open source project [GVP](https://gitee.com/gvp)
-5.  The manual of Gitee [https://gitee.com/help](https://gitee.com/help)
-6.  The most popular members  [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)

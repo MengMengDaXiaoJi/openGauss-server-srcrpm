@@ -1,0 +1,5 @@
+export GAUSSHOME=/usr/local/opengauss/
+export LD_LIBRARY_PATH=/usr/local/opengauss/lib:$LD_LIBRARY_PATH
+export PATH=/usr/local/opengauss/bin:$PATH
+export PGDATA=/var/lib/opengauss/data
+export PORT=5432

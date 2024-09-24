@@ -1,0 +1,272 @@
+From de3658a6e0cd8a9478e00e811a8b795b854c2d8e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=E9=BB=84=E5=90=89?= <huangji@iscas.ac.cn>
+Date: Sun, 22 Sep 2024 20:10:41 +0800
+Subject: [PATCH] =?UTF-8?q?=E9=80=82=E9=85=8Driscv64=E5=B9=B3=E5=8F=B0?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: 黄吉 <huangji@iscas.ac.cn>
+---
+ config/config.guess                           |  3 +
+ configure                                     |  2 +
+ .../storage/mot/core/Makefile.local           |  2 +
+ .../mot/core/infra/synchronization/cycles.h   |  8 +++
+ .../infra/synchronization/mot_atomic_ops.h    |  9 ++-
+ .../storage/mot/jit_exec/jit_llvm.cpp         |  4 +-
+ .../communication/commproxy_interface.h       | 24 ++++++++
+ src/include/gtm/utils/barrier.h               |  8 +++
+ src/include/storage/barrier.h                 |  8 +++
+ src/include/storage/lock/s_lock.h             | 57 +++++++++++++++++++
+ 10 files changed, 122 insertions(+), 3 deletions(-)
+
+diff --git a/config/config.guess b/config/config.guess
+index 15f22ac76..71c5ca385 100644
+--- a/config/config.guess
++++ b/config/config.guess
+@@ -963,6 +963,9 @@ EOF
+ 	loongarch*:Linux:*:*)
+ 	echo "$UNAME_MACHINE"-linux-"$LIBC"
+ 	exit ;;
++    riscv32:Linux:*:* | riscv64:Linux:*:*)
++	echo "$UNAME_MACHINE"-unknown-linux-"$LIBC"
++	exit ;;
+     mips:Linux:*:* | mips64:Linux:*:*)
+ 	eval $set_cc_for_build
+ 	sed 's/^	//' << EOF >$dummy.c
+diff --git a/configure b/configure
+index 9acc68514..3d56ba473 100755
+--- a/configure
++++ b/configure
+@@ -29069,6 +29069,8 @@ if [ "$PLATFORM_ARCH"X == "aarch64"X ] ; then
+   else
+     CFLAGS="-march=armv8-a+crc $CFLAGS"
+   fi
++elif [ "$PLATFORM_ARCH"X == "riscv64"X ] ; then
++        CFLAGS="-march=rv64g $CFLAGS"
+ elif [ "$PLATFORM_ARCH"X == "x86_64"X ] ; then
+ 	CFLAGS="-mcx16 $CFLAGS_SSE42 $CFLAGS"
+ else
+diff --git a/src/gausskernel/storage/mot/core/Makefile.local b/src/gausskernel/storage/mot/core/Makefile.local
+index 8bb0709cf..dcdaee3a9 100644
+--- a/src/gausskernel/storage/mot/core/Makefile.local
++++ b/src/gausskernel/storage/mot/core/Makefile.local
+@@ -72,6 +72,8 @@ PLATFORM_ARCH = $(shell uname -p)
+ ifeq ($(PLATFORM_ARCH),aarch64)
+ 	#CFLAGS += -std=gnu++11 -march=armv8-a+crc -Wall -Wextra -D_GLIBCXX_USE_CXX11_ABI=0 -fPIC
+ 	CFLAGS += -std=gnu++11 -march=armv8-a+crc -w -D_GLIBCXX_USE_CXX11_ABI=0 -fPIC
++else ifeq ($(PLATFORM_ARCH),riscv64)
++        CFLAGS += -std=gnu++11 -march=rv64g -w -D_GLIBCXX_USE_CXX11_ABI=0 -fPIC
+ else
+ 	#CFLAGS += -std=gnu++11 -march=native -mcx16 -Wall -Wextra -D_GLIBCXX_USE_CXX11_ABI=0 -fPIC
+ 	CFLAGS += -std=gnu++11 -mcx16 -w -D_GLIBCXX_USE_CXX11_ABI=0 -fPIC
+diff --git a/src/gausskernel/storage/mot/core/infra/synchronization/cycles.h b/src/gausskernel/storage/mot/core/infra/synchronization/cycles.h
+index 89213af13..57b4ae059 100644
+--- a/src/gausskernel/storage/mot/core/infra/synchronization/cycles.h
++++ b/src/gausskernel/storage/mot/core/infra/synchronization/cycles.h
+@@ -55,6 +55,10 @@ public:
+         unsigned long cval = 0;
+         asm volatile("isb; mrs %0, cntvct_el0" : "=r"(cval) : : "memory");
+         return cval;
++#elif defined(__riscv)
++        unsigned long cval = 0;
++	asm volatile("rdtime %0" : "=r"(cval) : : "memory");
++        return cval;
+ #else
+ #error "Unsupported CPU architecture or compiler."
+ #endif
+@@ -75,6 +79,10 @@ public:
+         unsigned long cval = 0;
+         asm volatile("isb; mrs %0, cntvct_el0" : "=r"(cval) : : "memory");
+         return cval;
++#elif defined(__riscv)
++        unsigned long cval = 0;
++	asm volatile("rdtime %0" : "=r"(cval) : : "memory");
++        return cval;
+ #else
+ #error "Unsupported CPU architecture or compiler."
+ #endif
+diff --git a/src/gausskernel/storage/mot/core/infra/synchronization/mot_atomic_ops.h b/src/gausskernel/storage/mot/core/infra/synchronization/mot_atomic_ops.h
+index 5b725e86c..04e7a3293 100644
+--- a/src/gausskernel/storage/mot/core/infra/synchronization/mot_atomic_ops.h
++++ b/src/gausskernel/storage/mot/core/infra/synchronization/mot_atomic_ops.h
+@@ -31,6 +31,13 @@
+ #define MEMORY_BARRIER() asm volatile("lock; addl $0,0(%%rsp)" : : : "memory")
+ #define READ_BARRIER() COMPILER_BARRIER
+ #define WRITE_BARRIER() COMPILER_BARRIER
++#elif defined(__riscv) /* riscv64 */
++#define COMPILER_BARRIER __sync_synchronize()
++#define RISCV_FENCE(p, s) \
++        __asm__ __volatile__ ("fence " #p "," #s : : : "memory")
++#define MEMORY_BARRIER() RISCV_FENCE(rw,rw)
++#define READ_BARRIER() RISCV_FENCE(r,r)
++#define WRITE_BARRIER() RISCV_FENCE(w,w) /* end elif riscv64 */
+ #else
+ #define COMPILER_BARRIER __sync_synchronize()
+ #define MEMORY_BARRIER_DSB(opt) __asm__ __volatile__("DMB " #opt::: "memory")
+@@ -72,4 +79,4 @@
+ /** @define Atomic compare-and-swap. Performs the operation "if (v == curr_value) then v = new_value". */
+ #define MOT_ATOMIC_CAS(v, curr_value, new_value) __sync_bool_compare_and_swap(&v, curr_value, new_value)
+ 
+-#endif /* MM_ATOMIC_OPS_H */
+\ No newline at end of file
++#endif /* MM_ATOMIC_OPS_H */
+diff --git a/src/gausskernel/storage/mot/jit_exec/jit_llvm.cpp b/src/gausskernel/storage/mot/jit_exec/jit_llvm.cpp
+index d12c72634..5f47410fc 100644
+--- a/src/gausskernel/storage/mot/jit_exec/jit_llvm.cpp
++++ b/src/gausskernel/storage/mot/jit_exec/jit_llvm.cpp
+@@ -61,8 +61,8 @@ bool JitCanInitThreadCodeGen()
+         return false;
+     }
+ 
+-#ifdef __aarch64__
+-    return true;  // Using native llvm on ARM
++#ifdef __aarch64__ || __riscv
++    return true;  // Using native llvm on ARM and RISCV
+ #else
+     if (!IsMotCodegenEnabled()) {
+         MOT_LOG_INFO("LLVM is disabled by configuration");
+diff --git a/src/include/communication/commproxy_interface.h b/src/include/communication/commproxy_interface.h
+index 9b999cca1..ebf02a34c 100644
+--- a/src/include/communication/commproxy_interface.h
++++ b/src/include/communication/commproxy_interface.h
+@@ -403,6 +403,30 @@ extern bool comm_compare_and_swap_32(volatile int32* dest, int32 oldval, int32 n
+ #define gaussdb_numa_memory_unbind()
+ #endif
+ 
++#elif defined(__riscv) /* riscv64 */
++#define RISCV_FENCE(p, s) \
++        __asm__ __volatile__ ("fence " #p "," #s : : : "memory")
++#define gaussdb_memory_barrier() RISCV_FENCE(rw,rw)
++#define gaussdb_read_barrier() RISCV_FENCE(r,r)
++#define gaussdb_write_barrier() RISCV_FENCE(w,w) /* end elif riscv64 */
++#if defined (__USE_NUMA)
++#define gaussdb_numa_memory_bind(i) \
++    do { \
++        struct bitmask *nodeMask = numa_allocate_nodemask(); \
++        numa_bitmask_setbit(nodeMask, (i)); \
++        numa_bind(nodeMask); \
++        numa_free_nodemask(nodeMask); \
++    } while (0);
++
++#define gaussdb_numa_memory_unbind() \
++    do { \
++        numa_bind(numa_all_nodes_ptr); \
++    } while (0);
++#else
++#define gaussdb_numa_memory_bind(i)
++#define gaussdb_numa_memory_unbind()
++#endif
++
+ #elif defined(__x86_64__)
+ #define gaussdb_memory_barrier() \
+     __asm__ __volatile__ ("lock; addl $0,0(%%rsp)" : : : "memory")
+diff --git a/src/include/gtm/utils/barrier.h b/src/include/gtm/utils/barrier.h
+index 0c152d3a6..a649c445f 100644
+--- a/src/include/gtm/utils/barrier.h
++++ b/src/include/gtm/utils/barrier.h
+@@ -118,6 +118,14 @@
+ } while (0)
+ 
+ #endif
++
++#elif defined(__riscv) /* riscv64 */
++#define RISCV_FENCE(p, s) \
++        __asm__ __volatile__ ("fence " #p "," #s : : : "memory")
++#define pg_memory_barrier() RISCV_FENCE(rw,rw)
++#define pg_read_barrier() RISCV_FENCE(r,r)
++#define pg_write_barrier() RISCV_FENCE(w,w) /* end elif riscv64 */
++
+ #elif defined(__ia64__) || defined(__ia64)
+ 
+ /*
+diff --git a/src/include/storage/barrier.h b/src/include/storage/barrier.h
+index 82097cd5d..2f4956228 100644
+--- a/src/include/storage/barrier.h
++++ b/src/include/storage/barrier.h
+@@ -117,6 +117,14 @@
+ } while (0)
+ 
+ #endif
++
++#elif defined(__riscv) /* riscv64 */
++#define RISCV_FENCE(p, s) \
++        __asm__ __volatile__ ("fence " #p "," #s : : : "memory")
++#define pg_memory_barrier() RISCV_FENCE(rw,rw)
++#define pg_read_barrier() RISCV_FENCE(r,r)
++#define pg_write_barrier() RISCV_FENCE(w,w) /* end elif riscv64 */
++
+ #elif defined(__ia64__) || defined(__ia64)
+ 
+ /*
+diff --git a/src/include/storage/lock/s_lock.h b/src/include/storage/lock/s_lock.h
+index 715d84a64..09c175a9f 100644
+--- a/src/include/storage/lock/s_lock.h
++++ b/src/include/storage/lock/s_lock.h
+@@ -380,6 +380,63 @@ static __inline__ int tas(volatile slock_t* lock)
+ #endif /* HAVE_GCC_INT_ATOMICS */
+ #endif /* __arm__ */
+ 
++#if defined(__riscv)
++
++#ifdef ENABLE_THREAD_CHECK
++extern "C" {
++    void AnnotateHappensBefore(const char *f, int l, uintptr_t addr);
++    void AnnotateHappensAfter(const char *f, int l, uintptr_t addr);
++}
++#define TsAnnotateHappensBefore(addr)      AnnotateHappensBefore(__FILE__, __LINE__, (uintptr_t)addr)
++#define TsAnnotateHappensAfter(addr)       AnnotateHappensAfter(__FILE__, __LINE__, (uintptr_t)addr)
++#else
++#define TsAnnotateHappensBefore(addr)
++#define TsAnnotateHappensAfter(addr)
++#endif /* endif ENABLE_THREAD_CHECK */
++
++#define HAS_TEST_AND_SET
++
++#define TAS(lock) tas(lock)
++
++#ifdef HAVE_GCC_INT_ATOMICS
++
++typedef int slock_t;
++
++static __inline__ int
++tas(volatile slock_t *lock)
++{
++    int ret = __sync_lock_test_and_set(lock, 1);
++    TsAnnotateHappensAfter(lock);
++    return ret;
++}
++
++#define S_UNLOCK(lock) do { \
++    TsAnnotateHappensBefore(lock); \
++    __sync_lock_release(lock); \
++} while(0)
++
++#else /* !HAVE_GCC_INT_ATOMICS */
++
++typedef unsigned int slock_t;
++
++static __inline__ int tas(volatile slock_t* lock)
++{
++    register slock_t _res = 1;
++
++    __asm__ volatile(
++                     "again: amoswap.w.aq   %0,   %0,   %1\n"
++                     "       bnez           %0,   again\n"
++                     "       amoswap.w.rl   x0,   x0,   %1\n"
++                     : "=r"(_res), "+m"(*lock)
++              :
++              : "cc", "memory"
++                     );
++    return (int)_res;
++}
++
++#endif /* HAVE_GCC_INT_ATOMICS */
++#endif /* __riscv */
++
+ /* S/390 and S/390x Linux (32- and 64-bit zSeries) */
+ #if defined(__s390__) || defined(__s390x__)
+ #define HAS_TEST_AND_SET
+-- 
+2.33.0
+

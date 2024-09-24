@@ -1,0 +1,10 @@
+--- a/configure   2024-09-23 08:35:16.953968102 +0000
++++ b/configure   2024-09-23 07:06:08.845051326 +0000
+@@ -3387,7 +3387,7 @@
+
+ fi
+
+-if [[ "$(cat /etc/system-release)" =~ ^"openEuler release 22.03".* ]]; then
++if [[ "$(cat /etc/system-release)" =~ ^"openEuler release".* ]]; then
+     with_openeuler_major=yes
+ fi
