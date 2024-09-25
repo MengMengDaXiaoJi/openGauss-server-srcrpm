@@ -2,13 +2,25 @@
 %define datapath /var/lib/opengauss
 %define apppath %{_prefix}/local/opengauss
 %define gauss_version master
+%define release_number 1
 # Only NUMA topology can enable mot feature in openGauss.
 # If your cpu is numa topology, you can change this value from false to true.
 %define is_enable_mot false
+%define is_build_lite false
+
+%if "%{is_build_lite}" == "true"
+%define release_version %{release_number}.lite
+%else
+  %if "%{is_enable_mot}" == "true"
+    %define release_version %{release_number}.full_mot
+  %else
+    %define release_version %{release_number}.full_no_mot
+  %endif
+%endif
 
 Name:           opengauss
 Version:        master
-Release:        1
+Release:        %{release_version}
 Summary:        opengauss is an open source relational database management system
 Provides:       opengauss = %{version}-%{release}
 License:        MulanPSL-2.0 and MIT and BSD and zlib and TCL and Apache-2.0 and BSL-1.0
@@ -88,7 +100,22 @@ export PATH=%{apppath}/bin:$GCC_PATH/gcc/bin:$PATH
 ########### build openGauss-server ################
 pushd openGauss-server-%{gauss_version}
 chmod +x ./configure
-%if "%{is_enable_mot}" == "true"
+
+%if "%{is_build_lite}" == "true"
+./configure \
+CC=g++ CFLAGS='-O2' \
+--prefix=%{apppath} \
+--3rd=$GAUSS_THIRD_PATH \
+--enable-thread-safety \
+--with-readline \
+--without-zlib \
+--without-gssapi \
+--without-krb5 \
+--enable-lite-mode \
+--with-openeuler-os
+
+%else
+  %if "%{is_enable_mot}" == "true"
 ./configure \
 CC=g++ CFLAGS='-O2' \
 --gcc-version=%{gcc_version} \
@@ -98,7 +125,7 @@ CC=g++ CFLAGS='-O2' \
 --with-readline \
 --without-zlib \
 --enable-mot
-%else
+  %else
 ./configure \
 CC=g++ CFLAGS='-O2' \
 --gcc-version=%{gcc_version} \
@@ -107,6 +134,7 @@ CC=g++ CFLAGS='-O2' \
 --enable-thread-safety \
 --with-readline \
 --without-zlib
+  %endif
 %endif
 
 %make_build
