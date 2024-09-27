@@ -15,7 +15,24 @@ Mainly for riscv64, also compatible with x86_64 and aarch64 architectures.
 2.  execute the updatecode.sh to clone and package latest openGauss-server master code.
 
     ```shell
+    chmod +x ./updatecode.sh
     sh ./updatecode.sh
+    ```
+
+3.  copy this code into 'SOURCE' directory which rpmbuild uses.
+
+#### compile
+
+1.  install build dependency
+
+    ```shell
+      yum-builddep opengauss-server.spec
+    ```
+
+2.  start build
+
+    ```shell
+      rpmbuild -ba opengauss-server.spec
     ```
 
 #### Install
@@ -23,13 +40,6 @@ Mainly for riscv64, also compatible with x86_64 and aarch64 architectures.
 1.  install the output rpm with follow script
 
     ```shell 
-    dnf install -y opengauss-master-1.riscv64.rpm
+    dnf install -y opengauss-master-1.full_no_mot.riscv64.rpm
     ```
-
-#### Contribution
-
-1.  Fork the repository
-2.  Create Feat_xxx branch
-3.  Commit your code
-4.  Create Pull Request
 
